@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Spot the Bias - Quiz Mode</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f2f2f2;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: #fff;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .article {
+      border: 1px solid #ccc;
+      padding: 1rem;
+      margin-top: 1rem;
+      user-select: text;
+    }
+    .highlighted {
+      background-color: yellow;
+      cursor: pointer;
+    }
+    .highlighted-correct {
+      background-color: #a5d6a7;
+      cursor: default;
+    }
+    .feedback {
+      margin-top: 1rem;
+      padding: 1rem;
+      display: none;
+      border-left: 5px solid;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-top: 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #restartBtn {
+      display: none;
+      margin-left: 1rem;
+      background: #eee;
+    }
+    .progress-container {
+      margin-top: 1rem;
+      background: #ddd;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 20px;
+      background-color: #4caf50;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .progress-text {
+      margin-top: 0.5rem;
+      font-weight: bold;
+    }
+
+    @keyframes flashGreen {
+      0% { background-color: #d4edda; }
+      100% { background-color: yellow; }
+    }
+    .flash-correct {
+      animation: flashGreen 1.6s ease;
+    }
+
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      50% { transform: translateX(4px); }
+      75% { transform: translateX(-4px); }
+      100% { transform: translateX(0); }
+    }
+    .shake {
+      animation: shake 0.4s ease;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <h1>🕵️ Spot the Bias - Quiz Mode</h1>
+  <p><strong>Level <span id="level">1</span></strong>: Highlight all biased words or phrases. Click the highlighted word(s) to remove it. Then click Submit.</p>
+
+  <div class="progress-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="progress-text" id="progressText">Level 1 of 3</div>
+
+  <div class="article" id="article" contenteditable="true"></div>
+  <button id="submitBtn" onclick="submitAnswer()">Submit</button>
+  <button id="nextBtn" style="display:none;" onclick="goToNextLevel()">Next Level</button>
+  <button id="restartBtn" onclick="restartQuiz()">Restart Quiz</button>
+
+  <div class="feedback" id="feedback"></div>
+</div>
+
+<script>
+  const levels = [
+    {
+      text: "You won’t believe what this celebrity did at the event!",
+      biased: ["you won't believe", "celebrity"]
+    },
+    {
+      text: "The senator mercilessly attacked her opponent's family in the debate.",
+      biased: ["mercilessly", "attacked"]
+    },
+    {
+      text: "This miracle cure is changing lives overnight, experts say.",
+      biased: ["miracle cure", "changing lives overnight"]
+    }
+  ];
+
+  let currentLevel = 0;
+
+  const article = document.getElementById("article");
+  const feedback = document.getElementById("feedback");
+  const levelDisplay = document.getElementById("level");
+  const nextBtn = document.getElementById("nextBtn");
+  const restartBtn = document.getElementById("restartBtn");
+  const submitBtn = document.getElementById("submitBtn");
+  const progressBar = document.getElementById("progressBar");
+  const progressText = document.getElementById("progressText");
+
+  function updateProgressBar() {
+    const percent = ((currentLevel + 1) / levels.length) * 100;
+    progressBar.style.width = percent + "%";
+    progressText.textContent = `Level ${currentLevel + 1} of ${levels.length}`;
+  }
+
+  function loadLevel(levelIndex) {
+    article.innerHTML = levels[levelIndex].text;
+    feedback.style.display = "none";
+    nextBtn.style.display = "none";
+    restartBtn.style.display = "none";
+    submitBtn.style.display = "inline-block";
+    levelDisplay.textContent = levelIndex + 1;
+    updateProgressBar();
+  }
+
+  article.addEventListener("mouseup", () => {
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    if (selectedText.length > 0) {
+      const range = selection.getRangeAt(0);
+      const span = document.createElement("span");
+      span.className = "highlighted";
+      span.textContent = selectedText;
+      span.addEventListener("click", (e) => {
+        const textNode = document.createTextNode(e.target.textContent);
+        e.target.replaceWith(textNode);
+      });
+      range.deleteContents();
+      range.insertNode(span);
+      selection.removeAllRanges();
+    }
+  });
+
+  function normalizeText(text) {
+    return text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+  }
+
+  function submitAnswer() {
+    const highlights = document.querySelectorAll(".highlighted");
+    const selectedWords = Array.from(highlights).map(el => normalizeText(el.textContent));
+    const correct = levels[currentLevel].biased.map(b => normalizeText(b));
+
+    let fullMatches = 0;
+    let partialMatches = 0;
+    let missed = 0;
+    let wrongHighlights = 0;
+    let matchedPhrases = new Set();
+
+    correct.forEach(phrase => {
+      const tokens = phrase.split(" ").filter(Boolean);
+      const matchedTokens = tokens.filter(token =>
+        selectedWords.some(word => word.includes(token))
+      );
+      if (matchedTokens.length === tokens.length) {
+        fullMatches++;
+        matchedPhrases.add(phrase);
+      } else if (matchedTokens.length > 0) {
+        partialMatches++;
+        matchedPhrases.add(phrase);
+      } else {
+        missed++;
+      }
+    });
+
+    selectedWords.forEach(word => {
+      const used = Array.from(matchedPhrases).some(phrase =>
+        phrase.split(" ").some(token => word.includes(token))
+      );
+      if (!used) wrongHighlights++;
+    });
+
+    highlights.forEach(el => {
+      const txt = normalizeText(el.textContent);
+      if (correct.some(c => txt.includes(c) || c.includes(txt))) {
+        el.classList.add("flash-correct");
+        setTimeout(() => el.classList.remove("flash-correct"), 1600);
+      }
+    });
+
+    let msg = "", color = "";
+
+    if (fullMatches === correct.length && wrongHighlights === 0) {
+      msg = "✅ Perfect! All biased words found.";
+      color = "#4CAF50";
+      submitBtn.style.display = "none";
+      nextBtn.style.display = "none";
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+
+      // Turn correct highlights green and lock them
+      highlights.forEach(el => {
+        const txt = normalizeText(el.textContent);
+        if (correct.some(c => txt.includes(c) || c.includes(txt))) {
+          el.classList.remove("highlighted");
+          el.classList.add("highlighted-correct");
+          el.onclick = null;
+        }
+      });
+
+      if (currentLevel < levels.length - 1) {
+        setTimeout(() => goToNextLevel(), 2000);
+      } else {
+        msg += "<br><strong>🎉 You've completed all levels!</strong>";
+        restartBtn.style.display = "inline-block";
+      }
+    } else if (fullMatches > 0 || partialMatches > 0) {
+      msg = `🤔 You're close! ${fullMatches} full, ${partialMatches} partial, ${missed} missed, ${wrongHighlights} incorrect.`;
+      color = "#ff9800";
+      nextBtn.style.display = "inline-block";
+    } else {
+      msg = `❌ Try again. You missed all the biased words.`;
+      color = "#f44336";
+      feedback.classList.add("shake");
+      setTimeout(() => feedback.classList.remove("shake"), 400);
+      nextBtn.style.display = "inline-block";
+    }
+
+    feedback.innerHTML = msg;
+    feedback.style.display = "block";
+    feedback.style.borderLeft = `5px solid ${color}`;
+    feedback.style.backgroundColor = color === "#4CAF50"
+      ? "#e6f4ea"
+      : color === "#ff9800"
+      ? "#fff4e5"
+      : "#fdecea";
+  }
+
+  function goToNextLevel() {
+    if (currentLevel < levels.length - 1) {
+      currentLevel++;
+      loadLevel(currentLevel);
+    }
+  }
+
+  function restartQuiz() {
+    currentLevel = 0;
+    loadLevel(currentLevel);
+  }
+
+  loadLevel(currentLevel);
+</script>
+</body>
+</html>
